@@ -85,10 +85,29 @@ function IndividualPage() {
   };
 
   const getContactBalance = (contactName) => {
-    const contactIous = ious.filter(i => i.contact === contactName);
-    return contactIous.reduce((acc, curr) => {
-      return curr.type === 'lent' ? acc + curr.amount : acc - curr.amount;
-    }, 0);
+    // Direct IOUs
+    const iouBalance = ious
+      .filter(i => i.contact === contactName)
+      .reduce((acc, curr) => curr.type === 'lent' ? acc + curr.amount : acc - curr.amount, 0);
+
+    // Group expenses involving this contact and "You"
+    let groupBalance = 0;
+    store.groups().forEach(group => {
+      (group.history || []).forEach(tx => {
+        if (tx.type === 'settlement') {
+          if (tx.paidBy === 'You' && tx.to === contactName) groupBalance += tx.amount;
+          else if (tx.paidBy === contactName && tx.to === 'You') groupBalance -= tx.amount;
+        } else {
+          if (tx.paidBy === 'You') {
+            groupBalance += tx.splitDetails?.[contactName] || 0;
+          } else if (tx.paidBy === contactName) {
+            groupBalance -= tx.splitDetails?.['You'] || 0;
+          }
+        }
+      });
+    });
+
+    return iouBalance + groupBalance;
   };
 
   const filteredMembers = members.filter(m => 

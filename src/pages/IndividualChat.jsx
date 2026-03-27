@@ -47,7 +47,7 @@ function IndividualChat() {
           
           if (tx.paidBy === 'You') {
             // How much contactId owes "You"
-            if (tx.splitType === 'equal') {
+            if (tx.splitType === 'Equal') {
               amountForContact = tx.amount / membersCount;
             } else {
               amountForContact = tx.splitDetails?.[contactId] || 0;
@@ -64,7 +64,7 @@ function IndividualChat() {
             }
           } else if (tx.paidBy === contactId) {
             // How much "You" owe contactId
-            if (tx.splitType === 'equal') {
+            if (tx.splitType === 'Equal') {
               amountForContact = tx.amount / membersCount;
             } else {
               amountForContact = tx.splitDetails?.['You'] || 0;

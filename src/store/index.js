@@ -11,79 +11,11 @@ export const useStore = () => {
     other: { icon: 'BadgeCent', color: 'text-brand-500', bg: 'bg-brand-50' },
   };
 
-  const defaultGroups = [
-    {
-      id: 1,
-      name: 'Goa Trip',
-      icon: 'users',
-      spent: 45000,
-      members: [
-        { name: 'You', amount: 15000, paid: true },
-        { name: 'Mike', amount: 10000, paid: true },
-        { name: 'Sarah', amount: 10000, paid: false },
-        { name: 'Alex', amount: 10000, paid: false },
-      ],
-      history: [
-        { id: 101, title: 'Flight Tickets', amount: 20000, paidBy: 'You', date: '2024-03-20' },
-        { id: 102, title: 'Hotel Booking', amount: 15000, paidBy: 'Mike', date: '2024-03-21' },
-        { id: 103, title: 'Dinner at Curlies', amount: 10000, paidBy: 'You', date: '2024-03-22' },
-      ],
-      splitType: 'Percent',
-      status: 'active',
-      created: '2024-03-20T10:00:00.000Z',
-    },
-    {
-      id: 2,
-      name: 'Apartment Rent',
-      icon: 'credit-card',
-      spent: 30000,
-      members: [
-        { name: 'You', amount: 15000, paid: true },
-        { name: 'Emily', amount: 15000, paid: false },
-      ],
-      history: [
-        { id: 104, title: 'March Rent', amount: 30000, paidBy: 'You', date: '2024-03-01' },
-      ],
-      splitType: 'Equal',
-      status: 'active',
-      created: '2024-03-01T10:00:00.000Z',
-    },
-    {
-      id: 3,
-      name: 'Weekend Party',
-      icon: 'users',
-      spent: 5000,
-      members: [
-        { name: 'You', amount: 2000, paid: true },
-        { name: 'Sarah', amount: 1500, paid: false },
-        { name: 'Mike', amount: 1500, paid: false },
-      ],
-      history: [
-        { id: 105, title: 'Drinks & Snacks', amount: 5000, paidBy: 'You', date: '2024-03-24' },
-      ],
-      splitType: 'Exact',
-      status: 'active',
-      created: '2024-03-24T10:00:00.000Z',
-    }
-  ];
+  const defaultGroups = [];
 
-  const defaultTransactions = [
-    { id: 1, type: 'income', category: 'Salary', account: 'HDFC Bank', amount: 85000, date: '2024-03-01' },
-    { id: 2, type: 'expense', category: 'Rent', account: 'HDFC Bank', amount: 30000, date: '2024-03-02' },
-    { id: 3, type: 'expense', category: 'Flight Tickets', account: 'Credit Card', amount: 20000, date: '2024-03-20' },
-    { id: 4, type: 'expense', category: 'Dinner', account: 'Credit Card', amount: 10000, date: '2024-03-22' },
-    { id: 5, type: 'expense', category: 'Drinks', account: 'UPI', amount: 5000, date: '2024-03-24' },
-    { id: 6, type: 'income', category: 'Freelance', account: 'SBI Bank', amount: 15000, date: '2024-03-25' },
-    { id: 7, type: 'expense', category: 'Groceries', account: 'UPI', amount: 3500, date: '2024-03-26' },
-  ];
+  const defaultTransactions = [];
 
-  const defaultMembers = [
-    { id: 1, name: 'You', avatar: 'user', phone: '+1 234 567 890', email: 'you@example.com' },
-    { id: 2, name: 'Mike', avatar: 'user', phone: '+1 234 567 891', email: 'mike@example.com' },
-    { id: 3, name: 'Sarah', avatar: 'user', phone: '+1 234 567 892', email: 'sarah@example.com' },
-    { id: 4, name: 'Alex', avatar: 'user', phone: '+1 234 567 893', email: 'alex@example.com' },
-    { id: 5, name: 'Emily', avatar: 'user', phone: '+1 234 567 894', email: 'emily@example.com' },
-  ];
+  const defaultMembers = [];
 
   // Get stored data or initialize with default
   const getGroups = () => {

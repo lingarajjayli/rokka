@@ -85,10 +85,24 @@ function IndividualPage() {
   };
 
   const getContactBalance = (contactName) => {
+    // 1. Direct IOUs
     const contactIous = ious.filter(i => i.contact === contactName);
-    return contactIous.reduce((acc, curr) => {
+    let balance = contactIous.reduce((acc, curr) => {
       return curr.type === 'lent' ? acc + curr.amount : acc - curr.amount;
     }, 0);
+
+    // 2. Group balances involving this contact
+    // contactMember.amount: positive = they are owed (creditor), negative = they owe (debtor)
+    // From your perspective: negate it → positive means they owe you
+    store.groups().forEach(group => {
+      if (!Array.isArray(group.members)) return;
+      const contactMember = group.members.find(m => m.name === contactName);
+      if (contactMember) {
+        balance += -(contactMember.amount || 0);
+      }
+    });
+
+    return balance;
   };
 
   const filteredMembers = members.filter(m => 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Calculator, Plus, CheckCircle2, TrendingDown, ArrowRight, X, Utensils, Car, Home, ShoppingBag, Film, BadgeCent, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Users, Calculator, Plus, CheckCircle2, TrendingDown, ArrowRight, X, Utensils, Car, Home, ShoppingBag, Film, BadgeCent, ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
 import { useStore } from '../store';
 
 function GroupDetail() {
@@ -21,6 +21,10 @@ function GroupDetail() {
   });
   const [splitDetails, setSplitDetails] = useState({});
   const [showConfirmSettlement, setShowConfirmSettlement] = useState(null);
+  const [showManageMembers, setShowManageMembers] = useState(false);
+  const [editingMembers, setEditingMembers] = useState([]);
+  const [involvedMembers, setInvolvedMembers] = useState([]);
+  const [editExpenseId, setEditExpenseId] = useState(null);
 
   const loadGroup = () => {
     const allGroups = store.groups();
@@ -33,17 +37,17 @@ function GroupDetail() {
   }, [groupId, store]);
 
   useEffect(() => {
-    // Reset split details when amount or group changes
+    // Reset split details when amount, splitType, or involvedMembers changes
     if (group && newExpense.amount) {
       const amount = parseFloat(newExpense.amount) || 0;
       if (newExpense.splitType === 'Equal') {
-        const share = amount / group.members.length;
+        const share = involvedMembers.length > 0 ? amount / involvedMembers.length : 0;
         const details = {};
-        group.members.forEach(m => details[m.name] = share);
+        involvedMembers.forEach(name => details[name] = share);
         setSplitDetails(details);
       }
     }
-  }, [newExpense.amount, newExpense.splitType, group]);
+  }, [newExpense.amount, newExpense.splitType, group, involvedMembers]);
 
   // Splitwise Debt Simplification Algorithm (Greedy)
   const simplifyDebts = (balances) => {
@@ -75,7 +79,14 @@ function GroupDetail() {
     
     // Validate Split
     const totalAmount = parseFloat(newExpense.amount);
-    const sum = Object.values(splitDetails).reduce((a, b) => a + b, 0);
+    
+    // Only consider split details of involved members
+    const activeSplitDetails = {};
+    involvedMembers.forEach(name => {
+      activeSplitDetails[name] = parseFloat(splitDetails[name]) || 0;
+    });
+
+    const sum = Object.values(activeSplitDetails).reduce((a, b) => a + b, 0);
     
     if (newExpense.splitType === 'Exact' && Math.abs(sum - totalAmount) > 0.01) {
       alert(`Total split (${sum.toFixed(2)}) must equal expense amount (${totalAmount.toFixed(2)})`);
@@ -86,7 +97,7 @@ function GroupDetail() {
       return;
     }
 
-    const finalSplitDetails = { ...splitDetails };
+    const finalSplitDetails = { ...activeSplitDetails };
     if (newExpense.splitType === 'Percent') {
       // Convert percent to actual amounts
       Object.keys(finalSplitDetails).forEach(name => {
@@ -103,8 +114,14 @@ function GroupDetail() {
       splitType: newExpense.splitType,
       splitDetails: finalSplitDetails
     };
+
+    if (editExpenseId) {
+      store.deleteTransaction(editExpenseId);
+    }
+    
     store.addTransactionToGroup(parseInt(groupId), expenseData);
     setShowAddExpense(false);
+    setEditExpenseId(null);
     setNewExpense({ 
       title: '', 
       amount: '', 
@@ -114,6 +131,10 @@ function GroupDetail() {
       splitType: 'Equal'
     });
     setSplitDetails({});
+    if (group?.members) {
+      setInvolvedMembers(group.members.map(m => m.name));
+    }
+    setEditExpenseId(null);
     loadGroup();
   };
 
@@ -141,6 +162,43 @@ function GroupDetail() {
     }
   };
 
+  const handleOpenManageMembers = () => {
+    // If group has no user 'You' explicitly, add it for display
+    let currentMembers = Array.isArray(group?.members) ? [...group.members] : [];
+    if (currentMembers.length > 0 && !currentMembers.some(m => m.name === 'You')) {
+      currentMembers.unshift({ id: 'you', name: 'You', amount: 0, paid: true });
+    }
+    setEditingMembers(currentMembers);
+    setShowManageMembers(true);
+  };
+
+  const toggleEditMember = (member) => {
+    const isSelected = editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name);
+    if (isSelected) {
+      // Don't allow removing "You"
+      if (member.name === 'You') {
+        alert("You cannot remove yourself from the group from here. Use 'Leave Group' instead.");
+        return;
+      }
+      
+      // Check if member has non-zero balance in the group
+      const existingMember = group.members.find(m => (m.id && m.id === member.id) || m.name === member.name);
+      if (existingMember && Math.abs(existingMember.amount || 0) >= 0.01) {
+        alert(`${member.name} cannot be removed because they have an unsettled balance.`);
+        return;
+      }
+      setEditingMembers(editingMembers.filter(m => !((m.id && m.id === member.id) || m.name === member.name)));
+    } else {
+      setEditingMembers([...editingMembers, { id: member.id, name: member.name, amount: 0, paid: true }]);
+    }
+  };
+
+  const handleSaveMembers = () => {
+    store.updateGroup(parseInt(groupId), { members: editingMembers });
+    setShowManageMembers(false);
+    loadGroup();
+  };
+
   const handleDeleteTransaction = (e, txId) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this transaction? This will revert all balance changes.')) {
@@ -148,6 +206,32 @@ function GroupDetail() {
       loadGroup();
       setSelectedExpense(null);
     }
+  };
+
+  const handleEditTransaction = (e, tx) => {
+    e.stopPropagation();
+    setNewExpense({
+      title: tx.title,
+      amount: tx.amount.toString(),
+      paidBy: tx.paidBy,
+      date: tx.date || new Date().toISOString().split('T')[0],
+      category: tx.category || 'other',
+      splitType: tx.splitType || group.splitType
+    });
+    
+    let initialSplits = { ...tx.splitDetails };
+    if ((tx.splitType === 'Percent' || group.splitType === 'Percent') && tx.amount) {
+      Object.keys(initialSplits).forEach(name => {
+        initialSplits[name] = ((initialSplits[name] / tx.amount) * 100).toFixed(1);
+      });
+    }
+    setSplitDetails(initialSplits);
+    
+    const activeMembers = Object.keys(tx.splitDetails || {}).filter(k => tx.splitDetails[k] !== undefined);
+    setInvolvedMembers(activeMembers.length ? activeMembers : group.members.map(m => m.name));
+    
+    setEditExpenseId(tx.id);
+    setShowAddExpense(true);
   };
 
   const getCategoryIcon = (catName) => {
@@ -169,11 +253,11 @@ function GroupDetail() {
     return grouped;
   };
 
-  // Build balances from group members
+  // Build balances from group members (positive = creditor, negative = debtor)
   const memberBalances = {};
   if (group?.members && Array.isArray(group.members)) {
     group.members.forEach(m => {
-      memberBalances[m.name] = m.paid ? (group.spent / group.members.length) : -(m.amount || 0);
+      memberBalances[m.name] = m.amount || 0;
     });
   } else {
     memberBalances['You'] = 120.50;
@@ -182,6 +266,7 @@ function GroupDetail() {
 
   const simplified = simplifyDebts(memberBalances);
   const currency = store.currency();
+  const allMembers = store.members();
   const historyGrouped = groupTransactionsByMonth(group?.history || []);
   const memberNames = Array.isArray(group?.members) ? group.members.map(m => m.name) : ['You'];
 
@@ -202,6 +287,13 @@ function GroupDetail() {
         </div>
         <div className="flex items-center space-x-3">
           <button
+            className="p-2.5 bg-white hover:bg-brand-50 rounded-xl border border-brand-100 text-brand-500 transition-all shadow-sm"
+            title="Manage Members"
+            onClick={handleOpenManageMembers}
+          >
+            <Users className="w-5 h-5" />
+          </button>
+          <button
             className="p-2.5 bg-white hover:bg-rose-50 rounded-xl border border-brand-100 text-rose-500 transition-all shadow-sm"
             title="Leave Group"
             onClick={handleLeaveGroup}
@@ -210,7 +302,20 @@ function GroupDetail() {
           </button>
           <button
             className="btn-primary flex items-center space-x-2 shadow-glow py-2.5"
-            onClick={() => setShowAddExpense(true)}
+            onClick={() => {
+              setEditExpenseId(null);
+              setNewExpense({ 
+                title: '', 
+                amount: '', 
+                paidBy: 'You', 
+                date: new Date().toISOString().split('T')[0],
+                category: 'other',
+                splitType: 'Equal'
+              });
+              setSplitDetails({});
+              setInvolvedMembers(group?.members?.map(m => m.name) || []);
+              setShowAddExpense(true);
+            }}
           >
             <Plus className="w-4 h-4" />
             <span>Add Expense</span>
@@ -237,7 +342,7 @@ function GroupDetail() {
                 <div key={m.name} className="flex justify-between items-center p-3 rounded-xl bg-brand-50 border border-brand-100/50">
                   <span className="font-bold text-brand-900">{m.name}</span>
                   <span className={`font-bold ${m.paid ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {m.paid ? `+${currency}${m.amount?.toFixed(2)}` : `-${currency}${m.amount?.toFixed(2)}`}
+                    {m.paid ? `+${currency}${m.amount?.toFixed(2)}` : `-${currency}${Math.abs(m.amount || 0).toFixed(2)}`}
                   </span>
                 </div>
               )) : (
@@ -342,6 +447,13 @@ function GroupDetail() {
                                 <p className="text-[10px] font-bold text-primary-500 uppercase tracking-widest mt-1">Split {tx.splitType || group.splitType}</p>
                               </div>
                               <button 
+                                onClick={(e) => handleEditTransaction(e, tx)}
+                                className="p-2 text-brand-300 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                title="Edit Transaction"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button 
                                 onClick={(e) => handleDeleteTransaction(e, tx.id)}
                                 className="p-2 text-brand-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                                 title="Delete Transaction"
@@ -379,7 +491,7 @@ function GroupDetail() {
         <div className="fixed inset-0 bg-brand-950/40 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-[2rem] p-6 md:p-8 w-full max-w-md shadow-2xl border border-white/20">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold font-heading text-brand-900">Add Expense</h2>
+              <h2 className="text-2xl font-bold font-heading text-brand-900">{editExpenseId ? 'Edit Expense' : 'Add Expense'}</h2>
               <button onClick={() => setShowAddExpense(false)} className="p-2 bg-brand-100 text-brand-500 hover:text-brand-900 rounded-full transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -462,17 +574,46 @@ function GroupDetail() {
                 </div>
               </div>
 
+              {/* Member Selection */}
+              <div>
+                <label className="block text-sm font-semibold text-brand-700 mb-2 ml-1">Involved in Expense</label>
+                <div className="flex flex-wrap gap-2">
+                  {group.members.map(member => (
+                    <button
+                      key={member.name}
+                      onClick={() => {
+                        if (involvedMembers.includes(member.name)) {
+                          // Prevent unselecting if it's the only member
+                          if (involvedMembers.length > 1) {
+                            setInvolvedMembers(involvedMembers.filter(n => n !== member.name));
+                          }
+                        } else {
+                          setInvolvedMembers([...involvedMembers, member.name]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                        involvedMembers.includes(member.name)
+                          ? 'bg-primary-50 text-primary-600 border-primary-200 shadow-sm'
+                          : 'bg-brand-50 text-brand-400 border-brand-100'
+                      }`}
+                    >
+                      {member.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Dynamic Split Details */}
               {(newExpense.splitType === 'Exact' || newExpense.splitType === 'Percent') && (
                 <div className="bg-brand-50 rounded-2xl p-4 border border-brand-100 animate-slide-up">
                   <p className="text-[10px] font-bold text-brand-400 uppercase tracking-widest mb-3 px-1 flex justify-between">
                     <span>Split by {newExpense.splitType}</span>
-                    <span className={Math.abs((Object.values(splitDetails).reduce((a,b)=>a+b,0)) - (newExpense.splitType === 'Exact' ? (parseFloat(newExpense.amount)||0) : 100)) < 0.01 ? 'text-emerald-500' : 'text-rose-500'}>
-                      {newExpense.splitType === 'Exact' ? `Remaining: ${currency}${(parseFloat(newExpense.amount)||0 - Object.values(splitDetails).reduce((a,b)=>a+b,0)).toFixed(2)}` : `Total: ${Object.values(splitDetails).reduce((a,b)=>a+b,0).toFixed(1)}%`}
+                    <span className={Math.abs((involvedMembers.map(m => parseFloat(splitDetails[m])||0).reduce((a,b)=>a+b,0)) - (newExpense.splitType === 'Exact' ? (parseFloat(newExpense.amount)||0) : 100)) < 0.01 ? 'text-emerald-500' : 'text-rose-500'}>
+                      {newExpense.splitType === 'Exact' ? `Remaining: ${currency}${(parseFloat(newExpense.amount)||0 - involvedMembers.map(m => parseFloat(splitDetails[m])||0).reduce((a,b)=>a+b,0)).toFixed(2)}` : `Total: ${involvedMembers.map(m => parseFloat(splitDetails[m])||0).reduce((a,b)=>a+b,0).toFixed(1)}%`}
                     </span>
                   </p>
                   <div className="space-y-3">
-                    {group.members.map(member => (
+                    {group.members.filter(m => involvedMembers.includes(m.name)).map(member => (
                       <div key={member.name} className="flex items-center space-x-3 bg-white p-2 rounded-xl border border-brand-100/50">
                         <span className="flex-1 text-sm font-bold text-brand-700 ml-2">{member.name}</span>
                         <div className="relative w-28">
@@ -508,7 +649,7 @@ function GroupDetail() {
                 onClick={handleAddExpense}
                 disabled={!newExpense.title || !newExpense.amount}
               >
-                Save Expense
+                {editExpenseId ? 'Update Expense' : 'Save Expense'}
               </button>
             </div>
           </div>
@@ -538,6 +679,66 @@ function GroupDetail() {
                 className="flex-1 py-3 bg-emerald-500 text-white font-bold rounded-2xl shadow-glow hover:bg-emerald-600 transition-all"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Members Modal */}
+      {showManageMembers && (
+        <div className="fixed inset-0 bg-brand-950/40 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-fade-in text-left">
+          <div className="bg-white rounded-[2rem] p-6 lg:p-8 w-full max-w-lg shadow-2xl border border-white/20">
+            <h2 className="text-2xl font-bold font-heading text-brand-900 mb-6">Manage Members</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-brand-700 mb-3 ml-1">Add or Remove Members</label>
+                <div className="max-h-64 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
+                  {[{ id: 'you', name: 'You' }, ...allMembers].map((member) => (
+                    <div 
+                      key={member.id}
+                      onClick={() => toggleEditMember(member)}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                        editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name)
+                        ? 'bg-primary-50 border-primary-300 shadow-sm'
+                        : 'bg-brand-50/50 border-brand-100 hover:border-brand-300'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                          editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name) ? 'bg-primary-600 text-white' : 'bg-brand-200 text-brand-600'
+                        }`}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-bold text-brand-900 text-sm">{member.name}</span>
+                      </div>
+                      {editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name) && (
+                        <div className="w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center">
+                          <CheckCircle2 className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {allMembers.length === 0 && (
+                    <div className="text-center py-4 bg-brand-50 border border-brand-100 border-dashed rounded-xl">
+                      <p className="text-xs text-brand-400">No contacts found to add.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end space-x-3 mt-8">
+              <button
+                className="px-5 py-2.5 text-brand-600 hover:bg-brand-50 font-semibold rounded-xl transition-colors"
+                onClick={() => setShowManageMembers(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary shadow-glow"
+                onClick={handleSaveMembers}
+              >
+                Save Changes
               </button>
             </div>
           </div>

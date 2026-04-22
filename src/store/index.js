@@ -1,5 +1,5 @@
 // Simple state management using localStorage
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 
 export const useStore = () => {
   const categories = {
@@ -16,6 +16,16 @@ export const useStore = () => {
   const defaultTransactions = [];
 
   const defaultMembers = [];
+
+  const defaultSettings = {
+    theme: 'light',
+    notifications: {
+      groupCreated: true,
+      expenseAdded: true,
+      debtSettled: true,
+    },
+    dataExport: false,
+  };
 
   // Get stored data or initialize with default
   const getGroups = () => {
@@ -69,6 +79,62 @@ export const useStore = () => {
 
   const saveCurrency = (symbol) => {
     localStorage.setItem('rokka_currency', symbol)
+  }
+
+  const getSettings = () => {
+    try {
+      const stored = localStorage.getItem('rokka_settings')
+      return stored ? JSON.parse(stored) : defaultSettings
+    } catch {
+      return defaultSettings
+    }
+  }
+
+  const saveSettings = (settings) => {
+    localStorage.setItem('rokka_settings', JSON.stringify(settings))
+  }
+
+  const updateTheme = (theme) => {
+    const settings = getSettings()
+    settings.theme = theme
+    saveSettings(settings)
+  }
+
+  const exportData = () => {
+    try {
+      const currency = getCurrency()
+      const groups = getGroups()
+      const transactions = getTransactions()
+      const members = getMembers()
+      const settings = getSettings()
+      
+      const data = {
+        exportedAt: new Date().toISOString(),
+        currency,
+        groups,
+        transactions,
+        members,
+        settings,
+      }
+      
+      return JSON.stringify(data, null, 2)
+    } catch {
+      return ''
+    }
+  }
+
+  const importData = (jsonData) => {
+    try {
+      const data = JSON.parse(jsonData)
+      localStorage.setItem('rokka_currency', data.currency || '$')
+      localStorage.setItem('rokka_settings', JSON.stringify(data.settings || {}))
+      saveGroups(data.groups)
+      saveTransactions(data.transactions)
+      saveMembers(data.members)
+      return { success: true, message: 'Data imported successfully!' }
+    } catch (err) {
+      return { success: false, message: 'Import failed: ' + err.message }
+    }
   }
 
   const updateCurrency = (symbol) => {
@@ -353,6 +419,7 @@ export const useStore = () => {
     transactions: getTransactions,
     members: getMembers,
     currency: getCurrency,
+    settings: getSettings,
     saveGroups,
     saveTransactions,
     saveMembers,
@@ -368,6 +435,10 @@ export const useStore = () => {
     addMember,
     resetToDefaultData,
     updateCurrency,
+    saveSettings,
+    updateTheme,
+    exportData,
+    importData,
     getGlobalHistory,
     suggestCategory,
     categories: () => categories,

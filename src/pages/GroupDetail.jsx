@@ -173,21 +173,21 @@ function GroupDetail() {
   };
 
   const toggleEditMember = (member) => {
-    const isSelected = editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name);
+    const isSelected = editingMembers.some(m => m.name === member.name);
     if (isSelected) {
-      // Don't allow removing "You"
       if (member.name === 'You') {
-        alert("You cannot remove yourself from the group from here. Use 'Leave Group' instead.");
+        alert("Use 'Leave Group' to remove yourself.");
         return;
       }
-      
-      // Check if member has non-zero balance in the group
-      const existingMember = group.members.find(m => (m.id && m.id === member.id) || m.name === member.name);
-      if (existingMember && Math.abs(existingMember.amount || 0) >= 0.01) {
-        alert(`${member.name} cannot be removed because they have an unsettled balance.`);
-        return;
+      const existing = group.members.find(m => m.name === member.name);
+      const bal = existing ? Math.abs(existing.amount || 0) : 0;
+      if (bal >= 0.01) {
+        const ok = window.confirm(
+          `${member.name} has an unsettled balance of ${currency}${bal.toFixed(2)}. Remove them anyway? Their balance will be cleared.`
+        );
+        if (!ok) return;
       }
-      setEditingMembers(editingMembers.filter(m => !((m.id && m.id === member.id) || m.name === member.name)));
+      setEditingMembers(editingMembers.filter(m => m.name !== member.name));
     } else {
       setEditingMembers([...editingMembers, { id: member.id, name: member.name, amount: 0, paid: true }]);
     }
@@ -686,64 +686,91 @@ function GroupDetail() {
       )}
 
       {/* Manage Members Modal */}
-      {showManageMembers && (
-        <div className="fixed inset-0 bg-brand-950/40 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-fade-in text-left">
-          <div className="bg-white rounded-[2rem] p-6 lg:p-8 w-full max-w-lg shadow-2xl border border-white/20">
-            <h2 className="text-2xl font-bold font-heading text-brand-900 mb-6">Manage Members</h2>
-            <div className="space-y-5">
+      {showManageMembers && (() => {
+        // Build the full member list: always include current group members + available contacts
+        const seen = new Set();
+        const memberList = [
+          { id: 'you', name: 'You' },
+          // Current group members who aren't "You" (ensures they're always visible for removal)
+          ...group.members
+            .filter(m => m.name !== 'You')
+            .map(m => ({ id: m.id, name: m.name })),
+          // Global contacts not already in the group (for adding new people)
+          ...allMembers.filter(cm => !group.members.some(gm => gm.name === cm.name)),
+        ].filter(m => { if (seen.has(m.name)) return false; seen.add(m.name); return true; });
+
+        const isInGroup = (member) =>
+          editingMembers.some(m => m.name === member.name);
+
+        const balance = (member) => {
+          const gm = group.members.find(m => m.name === member.name);
+          return gm ? (gm.amount || 0) : 0;
+        };
+
+        return (
+          <div className="fixed inset-0 bg-brand-950/40 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-fade-in text-left">
+            <div className="bg-white rounded-[2rem] p-6 lg:p-8 w-full max-w-lg shadow-2xl border border-white/20">
+              <h2 className="text-2xl font-bold font-heading text-brand-900 mb-6">Manage Members</h2>
               <div>
                 <label className="block text-sm font-semibold text-brand-700 mb-3 ml-1">Add or Remove Members</label>
-                <div className="max-h-64 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
-                  {[{ id: 'you', name: 'You' }, ...allMembers].map((member) => (
-                    <div 
-                      key={member.id}
-                      onClick={() => toggleEditMember(member)}
-                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                        editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name)
-                        ? 'bg-primary-50 border-primary-300 shadow-sm'
-                        : 'bg-brand-50/50 border-brand-100 hover:border-brand-300'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
-                          editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name) ? 'bg-primary-600 text-white' : 'bg-brand-200 text-brand-600'
-                        }`}>
-                          {member.name.charAt(0).toUpperCase()}
+                <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
+                  {memberList.map((member) => {
+                    const selected = isInGroup(member);
+                    const bal = balance(member);
+                    const hasBalance = Math.abs(bal) >= 0.01;
+                    return (
+                      <div
+                        key={member.name}
+                        onClick={() => toggleEditMember(member)}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
+                          selected
+                            ? 'bg-primary-50 border-primary-300 shadow-sm'
+                            : 'bg-brand-50/50 border-brand-100 hover:border-brand-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                            selected ? 'bg-primary-600 text-white' : 'bg-brand-200 text-brand-600'
+                          }`}>
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="font-bold text-brand-900 text-sm">{member.name}</span>
+                            {selected && hasBalance && (
+                              <p className={`text-[10px] font-bold ${bal > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {bal > 0 ? `owed ${currency}${bal.toFixed(2)}` : `owes ${currency}${Math.abs(bal).toFixed(2)}`}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <span className="font-bold text-brand-900 text-sm">{member.name}</span>
+                        {selected && (
+                          <div className="w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-3 h-3 text-white" />
+                          </div>
+                        )}
                       </div>
-                      {editingMembers.some(m => (m.id && m.id === member.id) || m.name === member.name) && (
-                        <div className="w-5 h-5 bg-primary-600 rounded-full flex items-center justify-center">
-                          <CheckCircle2 className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {allMembers.length === 0 && (
-                    <div className="text-center py-4 bg-brand-50 border border-brand-100 border-dashed rounded-xl">
-                      <p className="text-xs text-brand-400">No contacts found to add.</p>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-end space-x-3 mt-8">
-              <button
-                className="px-5 py-2.5 text-brand-600 hover:bg-brand-50 font-semibold rounded-xl transition-colors"
-                onClick={() => setShowManageMembers(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-primary shadow-glow"
-                onClick={handleSaveMembers}
-              >
-                Save Changes
-              </button>
+              <div className="flex items-center justify-end space-x-3 mt-8">
+                <button
+                  className="px-5 py-2.5 text-brand-600 hover:bg-brand-50 font-semibold rounded-xl transition-colors"
+                  onClick={() => setShowManageMembers(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary shadow-glow"
+                  onClick={handleSaveMembers}
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

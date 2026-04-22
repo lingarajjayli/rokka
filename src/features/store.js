@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowUpRight as ArrowUpRightIcon, CreditCard as CreditCardIcon, TrendingDown as TrendingDownIcon, Users as UsersIcon } from 'lucide-react'
+import { CreditCard as CreditCardIcon, Users as UsersIcon } from 'lucide-react'
 
 export function useStore() {
   const [groups, setGroups] = useState([])
